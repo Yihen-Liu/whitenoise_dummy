@@ -17,7 +17,6 @@ type InboundEvent struct {
 	//sessionID string
 	//streamID  string
 	//data      []byte
-	msg []byte
 }
 
 func (s *NetworkService) StreamHandler(stream network.Stream) {

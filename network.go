@@ -50,7 +50,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 }
 
 func (service *NetworkService) Start() {
-	fmt.Printf("start service %v\n",peer.Encode(service.host.ID()))
+	fmt.Printf("start service %v\n", peer.Encode(service.host.ID()))
 	//println("start service: ",service.host.ID())
 	go service.peerMap.run()
 	go func() {
@@ -96,7 +96,7 @@ func (service *NetworkService) NewSessionToPeer(peerID core.PeerID, sessionID st
 }
 
 func (service *NetworkService) SetSessionId(sessionID string, streamID string) error {
-	stream, ok := service.SessionMapper.StreamMapNonid[streamID]
+	stream, ok := service.SessionMapper.StreamMap[streamID]
 	if ok {
 		s, ok := service.SessionMapper.SessionmapID[sessionID]
 		if !ok {

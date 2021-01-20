@@ -12,6 +12,7 @@ const SESSIONIDNON string = "SessionIDNon"
 type Session struct {
 	Id   string
 	pair StreamPair
+	Out  bool
 }
 
 type StreamPair []Stream
@@ -32,6 +33,7 @@ func NewSession() Session {
 	return Session{
 		Id:   SESSIONIDNON,
 		pair: StreamPair{},
+		Out:  false,
 	}
 }
 
@@ -75,27 +77,28 @@ func (s *Session) GetPair() StreamPair {
 	return s.pair
 }
 
-//func (p StreamPair) pop() {
-//}
-
 func (s *Session) IsReady() bool {
 	return len(s.pair) == 2
 }
 
+func (s *Session) SetOutPoint() {
+	s.Out = true
+}
+
 type SessionManager struct {
-	StreamMapNonid map[string]Stream
-	SessionmapID   map[string]Session
+	StreamMap    map[string]Stream
+	SessionmapID map[string]Session
 }
 
 func NewSessionMapper() SessionManager {
 	return SessionManager{
-		StreamMapNonid: make(map[string]Stream),
-		SessionmapID:   make(map[string]Session),
+		StreamMap:    make(map[string]Stream),
+		SessionmapID: make(map[string]Session),
 	}
 }
 
 func (man *SessionManager) AddSessionNonid(s Stream) {
-	man.StreamMapNonid[s.StreamId] = s
+	man.StreamMap[s.StreamId] = s
 }
 
 func (man *SessionManager) AddSessionId(id string, s Session) {
