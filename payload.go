@@ -28,9 +28,10 @@ func Bytes2Int(b []byte) uint32 {
 
 func NewSetSessionIDCommand(sessionID string, streamID string) []byte {
 	payload := pb.Payload{
-		SessionId: sessionID,
-		StreamId:  streamID,
-		Data:      []byte{},
+		SessionCmd: true,
+		SessionId:  sessionID,
+		StreamId:   streamID,
+		Data:       []byte{},
 	}
 	comd, _ := proto.Marshal(&payload)
 	return EncodePayload(comd)
@@ -38,9 +39,21 @@ func NewSetSessionIDCommand(sessionID string, streamID string) []byte {
 
 func NewMsg(data []byte) []byte {
 	payload := pb.Payload{
-		SessionId: "",
-		StreamId:  "",
-		Data:      data,
+		SessionCmd: false,
+		SessionId:  "",
+		StreamId:   "",
+		Data:       data,
+	}
+	comd, _ := proto.Marshal(&payload)
+	return EncodePayload(comd)
+}
+
+func NewRelay(data []byte, sessionID string) []byte {
+	payload := pb.Payload{
+		SessionCmd: false,
+		SessionId:  sessionID,
+		StreamId:   "",
+		Data:       data,
 	}
 	comd, _ := proto.Marshal(&payload)
 	return EncodePayload(comd)

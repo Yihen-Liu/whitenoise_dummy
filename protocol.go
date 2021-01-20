@@ -17,16 +17,17 @@ type InboundEvent struct {
 	//sessionID string
 	//streamID  string
 	//data      []byte
+	msg []byte
 }
 
 func (s *NetworkService) StreamHandler(stream network.Stream) {
 	fmt.Println("Got a new stream: ", stream.ID())
-	session := NewSession(stream)
-	s.SessionMapper.AddSessionNonid(session)
-	go s.InboundHandler(session)
+	str := NewStream(stream)
+	s.SessionMapper.AddSessionNonid(str)
+	go s.InboundHandler(str)
 }
 
-func (service *NetworkService) InboundHandler(s Session) {
+func (service *NetworkService) InboundHandler(s Stream) {
 	for {
 		lBytes := make([]byte, 4)
 		_, err := io.ReadFull(s.RW, lBytes)
@@ -49,31 +50,78 @@ func (service *NetworkService) InboundHandler(s Session) {
 			continue
 		}
 		//TODO:add command dispatch
-		if payload.SessionId == "" {
-			fmt.Printf("Receive msg:%v\n", string(payload.Data))
-			continue
-		}
-		//s, ok := service.SessionMapper.SessionmapNonid[payload.StreamId]
-		//if !ok {
-		//	fmt.Printf("Receive set session request but no such stream %v\n", payload.StreamId)
-		//	continue
-		//}
-		s.SetSessionID(payload.SessionId)
-		service.SessionMapper.AddSessionId(payload.SessionId, s)
-		fmt.Printf("add sessionid %v to stream %v", payload.SessionId, s.StreamId)
-		reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
-		_, err = s.RW.Write(reply)
-		if err != nil {
-			println("write err", err)
-			return
-		}
-		err = s.RW.Flush()
-		if err != nil {
-			println("flush err", err)
-			return
-		}
+		if !payload.SessionCmd {
+			if payload.SessionId == "" {
+				service.handleMsg(&payload, s)
+				continue
+			} else {
+				//HandleRelay
+				println("Handling relay")
+				session, ok := service.SessionMapper.SessionmapID[payload.SessionId]
+				if ok {
+					if session.IsReady() {
+						part, err := session.GetPattern(s.StreamId)
+						if err != nil {
+							println("get part err", err)
+							continue
+						}
+						relay := NewRelay(payload.Data, payload.SessionId)
+						_, err = part.RW.Write(relay)
+						if err != nil {
+							println("write err", err)
+							continue
+						}
+						err = part.RW.Flush()
+						if err != nil {
+							println("flush err", err)
+							continue
+						}
+					} else {
+						//TODO:give relay msg to client for relay node
+						fmt.Printf("maybe endpoint %v\n", string(payload.Data))
+					}
+				} else {
+					println("relay no such session")
+				}
+			}
 
+		} else {
+			err = service.handleCommand(&payload, s)
+			if err != nil {
+				println("handle command err: ", err)
+				continue
+			}
+		}
 	}
+}
+
+func (service NetworkService) handleMsg(payload *pb.Payload, s Stream) {
+	fmt.Printf("Receive msg:%v\n", string(payload.Data))
+}
+
+func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error {
+	session, ok := service.SessionMapper.SessionmapID[payload.SessionId]
+	if !ok {
+		session = NewSession()
+		session.SetSessionID(payload.SessionId)
+	}
+	session.AddStream(s)
+	service.SessionMapper.AddSessionId(payload.SessionId, session)
+	fmt.Printf("add sessionid %v to stream %v\n", payload.SessionId, s.StreamId)
+	fmt.Printf("session: %v\n", session)
+
+	reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
+	_, err := s.RW.Write(reply)
+	if err != nil {
+		println("write err", err)
+		return err
+	}
+	err = s.RW.Flush()
+	if err != nil {
+		println("flush err", err)
+		return err
+	}
+	return nil
 }
 
 func readData(rw *bufio.ReadWriter) {

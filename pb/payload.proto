@@ -2,7 +2,8 @@ syntax = "proto3";
 package pb;
 
 message Payload {
-  string session_id = 1;
-  string stream_id = 2;
-  bytes data = 3;
+  bool session_cmd = 1;
+  string session_id = 2;
+  string stream_id = 3;
+  bytes data = 4;
 }

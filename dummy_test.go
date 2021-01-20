@@ -18,3 +18,8 @@ func TestDummy(t *testing.T) {
 	}
 	service.Start()
 }
+
+func Test_xor(t *testing.T)  {
+	var i int = 0
+	println(i^1)
+}

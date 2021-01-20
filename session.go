@@ -2,6 +2,7 @@ package whitenoise
 
 import (
 	"bufio"
+	"errors"
 	"github.com/libp2p/go-libp2p-core/network"
 )
 
@@ -9,16 +10,28 @@ const SESSIONIDNON string = "SessionIDNon"
 
 //TODO:add mutex
 type Session struct {
-	Id       string
+	Id   string
+	pair StreamPair
+}
+
+type StreamPair []Stream
+
+type Stream struct {
 	StreamId string
 	RW       *bufio.ReadWriter
 }
 
-func NewSession(stream network.Stream) Session {
+func NewStream(s network.Stream) Stream {
+	return Stream{
+		StreamId: s.ID(),
+		RW:       bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s)),
+	}
+}
+
+func NewSession() Session {
 	return Session{
-		Id:       SESSIONIDNON,
-		StreamId: stream.ID(),
-		RW:       bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream)),
+		Id:   SESSIONIDNON,
+		pair: StreamPair{},
 	}
 }
 
@@ -26,22 +39,69 @@ func (s *Session) SetSessionID(sID string) {
 	s.Id = sID
 }
 
-type SessionMapper struct {
-	SessionmapNonid map[string]Session
-	SessionmapID    map[string]Session
-}
-
-func NewSessionMapper() SessionMapper {
-	return SessionMapper{
-		SessionmapNonid: make(map[string]Session),
-		SessionmapID:    make(map[string]Session),
+func (s *Session) AddStream(stream Stream) {
+	s.pair = append(s.pair, stream)
+	for {
+		if len(s.pair) > 2 {
+			s.pair = s.pair[1:]
+		} else {
+			break
+		}
 	}
 }
 
-func (mapper *SessionMapper) AddSessionNonid(s Session) {
-	mapper.SessionmapNonid[s.StreamId] = s
+func (s *Session) Has(streamID string) bool {
+	for _, s := range s.pair {
+		if s.StreamId == streamID {
+			return true
+		}
+	}
+	return false
 }
 
-func (mapper *SessionMapper) AddSessionId(id string, s Session) {
-	mapper.SessionmapID[id] = s
+func (s *Session) GetPattern(streamID string) (Stream, error) {
+	if len(s.pair) != 2 {
+		return Stream{}, errors.New("session not ready")
+	}
+	for i, stream := range s.pair {
+		if stream.StreamId == streamID {
+			return s.pair[i^1], nil
+		}
+	}
+	return Stream{}, errors.New("no such stream")
+}
+
+func (s *Session) GetPair() StreamPair {
+	return s.pair
+}
+
+//func (p StreamPair) pop() {
+//}
+
+func (s *Session) IsReady() bool {
+	return len(s.pair) == 2
+}
+
+type SessionManager struct {
+	StreamMapNonid map[string]Stream
+	SessionmapID   map[string]Session
+}
+
+func NewSessionMapper() SessionManager {
+	return SessionManager{
+		StreamMapNonid: make(map[string]Stream),
+		SessionmapID:   make(map[string]Session),
+	}
+}
+
+func (man *SessionManager) AddSessionNonid(s Stream) {
+	man.StreamMapNonid[s.StreamId] = s
+}
+
+func (man *SessionManager) AddSessionId(id string, s Session) {
+	man.SessionmapID[id] = s
+}
+
+func (service *NetworkService) ConnectStream(s *Session) {
+
 }

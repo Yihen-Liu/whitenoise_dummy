@@ -2,6 +2,7 @@ package whitenoise
 
 import (
 	"context"
+	"fmt"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -22,7 +23,8 @@ type Discovery struct {
 func (self *Discovery) run() {
 	for {
 		peer := <-self.peerChan
-		println("get peer:", peer.ID)
+		fmt.Printf("get peer:%v\n", peer.ID)
+		//println("get peer:", peer.ID)
 		_, ok := self.peerMap[peer.ID]
 		if !ok {
 			self.event <- peer
