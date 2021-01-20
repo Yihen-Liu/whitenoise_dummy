@@ -1,7 +1,6 @@
 package whitenoise
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -17,26 +16,9 @@ import (
 type NetworkService struct {
 	host          host.Host
 	ctx           context.Context
-	peerMap       PeerMapper
-	sessionMapper SessionMapper
-}
-
-type PeerMapper struct {
-	peerMap  map[core.PeerID]core.PeerAddrInfo
-	peerChan chan core.PeerAddrInfo
-	event    chan core.PeerAddrInfo
-}
-
-func (self *PeerMapper) run() {
-	for {
-		peer := <-self.peerChan
-		println("get peer:", peer.ID)
-		_, ok := self.peerMap[peer.ID]
-		if !ok {
-			self.event <- peer
-		}
-		self.peerMap[peer.ID] = peer
-	}
+	peerMap       Discovery
+	SessionMapper SessionMapper
+	inboundEvent  chan InboundEvent
 }
 
 func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
@@ -49,43 +31,73 @@ func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
 
 func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*NetworkService, error) {
 	peerChan := initMDNS(ctx, host, cfg.RendezvousString)
-	host.SetStreamHandler(protocol.ID(WHITENOISE_PROTOCOL), StreamHandler)
+
 	service := NetworkService{
 		host: host,
 		ctx:  ctx,
-		peerMap: PeerMapper{
+		peerMap: Discovery{
 			peerMap:  make(map[core.PeerID]core.PeerAddrInfo),
 			peerChan: peerChan,
 			event:    make(chan core.PeerAddrInfo),
 		},
+		SessionMapper: NewSessionMapper(),
+		inboundEvent:  make(chan InboundEvent),
 	}
+	service.host.SetStreamHandler(protocol.ID(WHITENOISE_PROTOCOL), service.StreamHandler)
 	return &service, nil
-
 }
 
 func (service *NetworkService) Start() {
 	println("start service")
 	go service.peerMap.run()
-	for {
-		peer := <-service.peerMap.event
-		service.TryConnect(peer)
-		service.GenWhiteNoiseStream(peer.ID)
-	}
+	go func() {
+		for {
+			peer := <-service.peerMap.event
+			service.TryConnect(peer)
+			service.NewWhiteNoiseStream(peer.ID)
+		}
+	}()
 }
 
-func (service *NetworkService) GenWhiteNoiseStream(peerID core.PeerID) {
+func (service *NetworkService) NewWhiteNoiseStream(peerID core.PeerID) {
 	stream, err := service.host.NewStream(service.ctx, peerID, protocol.ID(WHITENOISE_PROTOCOL))
-
 	if err != nil {
 		fmt.Printf("newstream to %v error: %v\n", peerID, err)
 	} else {
 		fmt.Println("gen new stream: ", stream.ID())
-		rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-		go writeData(rw)
-		go readData(rw)
-		//session := NewSession(stream)
-		//service.sessionMapper.AddSession(session)
+		s := NewSession(stream)
+		service.SessionMapper.AddSessionNonid(s)
+		go service.InboundHandler(s)
 		fmt.Printf("Connected to:%v \n", peerID)
+		_, err = s.RW.Write(NewMsg([]byte("hi")))
+		if err != nil {
+			println("write err", err)
+			return
+		}
+		err = s.RW.Flush()
+		if err != nil {
+			println("flush err", err)
+			return
+		}
+	}
+}
+
+func (service *NetworkService) SetSessionId(sessionID string, streamID string) {
+	s, ok := service.SessionMapper.SessionmapNonid[streamID]
+	if ok {
+		service.SessionMapper.AddSessionId(sessionID, s)
+	} else {
+		println("no such stream:", streamID)
+	}
+	_, err := s.RW.Write(NewSetSessionIDCommand(sessionID, streamID))
+	if err != nil {
+		println("write err", err)
+		return
+	}
+	err = s.RW.Flush()
+	if err != nil {
+		println("flush err", err)
+		return
 	}
 }
 

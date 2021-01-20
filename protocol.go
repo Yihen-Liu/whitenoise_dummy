@@ -3,22 +3,77 @@ package whitenoise
 import (
 	"bufio"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/libp2p/go-libp2p-core/network"
+	"io"
 	"os"
+	"whitenoise/pb"
 )
 
 const WHITENOISE_PROTOCOL string = "whitenoise"
 
-func StreamHandler(stream network.Stream) {
-	fmt.Println("Got a new stream: ",stream.ID())
+type InboundEvent struct {
+	//raw       []byte
+	//sessionID string
+	//streamID  string
+	//data      []byte
+}
 
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+func (s *NetworkService) StreamHandler(stream network.Stream) {
+	fmt.Println("Got a new stream: ", stream.ID())
+	session := NewSession(stream)
+	s.SessionMapper.AddSessionNonid(session)
+	go s.InboundHandler(session)
+}
 
-	go readData(rw)
-	go writeData(rw)
+func (service *NetworkService) InboundHandler(s Session) {
+	for {
+		lBytes := make([]byte, 4)
+		_, err := io.ReadFull(s.RW, lBytes)
+		if err != nil {
+			continue
+		}
 
-	// 'stream' will stay open until you close it (or the other side closes it).
+		l := Bytes2Int(lBytes)
+		msgBytes := make([]byte, l)
+		_, err = io.ReadFull(s.RW, msgBytes)
+		if err != nil {
+			println("payload not enough bytes")
+			continue
+		}
+
+		var payload pb.Payload = pb.Payload{}
+		err = proto.Unmarshal(msgBytes, &payload)
+		if err != nil {
+			println("unmarshal err", err)
+			continue
+		}
+		//TODO:add command dispatch
+		if payload.SessionId == "" {
+			fmt.Printf("Receive msg:%v\n", string(payload.Data))
+			continue
+		}
+		//s, ok := service.SessionMapper.SessionmapNonid[payload.StreamId]
+		//if !ok {
+		//	fmt.Printf("Receive set session request but no such stream %v\n", payload.StreamId)
+		//	continue
+		//}
+		s.SetSessionID(payload.SessionId)
+		service.SessionMapper.AddSessionId(payload.SessionId, s)
+		fmt.Printf("add sessionid %v to stream %v", payload.SessionId, s.StreamId)
+		reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
+		_, err = s.RW.Write(reply)
+		if err != nil {
+			println("write err", err)
+			return
+		}
+		err = s.RW.Flush()
+		if err != nil {
+			println("flush err", err)
+			return
+		}
+
+	}
 }
 
 func readData(rw *bufio.ReadWriter) {

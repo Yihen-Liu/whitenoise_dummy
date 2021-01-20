@@ -1,7 +1,7 @@
 package whitenoise
 
 import (
-"flag"
+	"flag"
 )
 
 //type NetworkConfig struct {
@@ -16,9 +16,10 @@ type NetworkConfig struct {
 	ProtocolID       string
 	listenHost       string
 	listenPort       int
+	Session          bool
 }
 
-func NewConfig() *NetworkConfig{
+func NewConfig() *NetworkConfig {
 	return parseFlags()
 }
 
@@ -29,7 +30,7 @@ func parseFlags() *NetworkConfig {
 	flag.StringVar(&c.listenHost, "host", "127.0.0.1", "The bootstrap node host listen address\n")
 	flag.StringVar(&c.ProtocolID, "pid", "whitenoise", "Sets a protocol id for stream headers")
 	flag.IntVar(&c.listenPort, "port", 4001, "node listen port")
-
+	flag.BoolVar(&c.Session,"session",false,"test session")
 	flag.Parse()
 	return c
 }
