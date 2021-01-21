@@ -22,6 +22,7 @@ type NetworkService struct {
 	discovery     Discovery
 	SessionMapper SessionManager
 	inboundEvent  chan InboundEvent
+	PubsubService *PubsubService
 }
 
 func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
@@ -46,6 +47,10 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 		SessionMapper: NewSessionMapper(),
 		inboundEvent:  make(chan InboundEvent),
 	}
+	err := service.NewPubsubService()
+	if err != nil {
+		log.Error("New service err: ", err)
+	}
 	service.host.SetStreamHandler(protocol.ID(WHITENOISE_PROTOCOL), service.StreamHandler)
 	return &service, nil
 }
@@ -53,6 +58,8 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 func (service *NetworkService) Start() {
 	log.Infof("start service %v\n", peer.Encode(service.host.ID()))
 	go service.discovery.run()
+	service.PubsubService.Start()
+	go service.HandleGossipMsg()
 	go func() {
 		for {
 			peer := <-service.discovery.event
@@ -142,6 +149,13 @@ func (service *NetworkService) SendRelay(sessionid string, data []byte) {
 		}
 	}
 
+}
+
+func (service *NetworkService) HandleGossipMsg() {
+	for {
+		msg := <-service.PubsubService.Messages
+		log.Infof("Receive Gossip: %v\n", string(msg.data))
+	}
 }
 
 func NewDummyHost(ctx context.Context, cfg *NetworkConfig) (host.Host, error) {

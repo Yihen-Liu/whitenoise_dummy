@@ -26,7 +26,7 @@ func main() {
 	service.Start()
 	///for testing
 	if cfg.Session != "" {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 2)
 		//i := 0
 		//for _, v := range service.SessionMapper.StreamMap {
 		//	println("start set session id")
@@ -44,11 +44,19 @@ func main() {
 	}
 
 	if cfg.Relay {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 2)
 		//for _, session := range service.SessionMapper.SessionmapID {
 		//	service.SendRelay(session.Id, []byte("Hi..Hi..Hi.."))
 		//}
-		service.SendRelay("hello",[]byte("HoHoHo!"))
+		service.SendRelay("hello", []byte("HoHoHo!"))
+	}
+
+	if cfg.Pub != "" {
+		time.Sleep(time.Second * 2)
+		err := service.PubsubService.Publish([]byte(cfg.Pub))
+		if err != nil {
+			log.Error("Publish err", err)
+		}
 	}
 
 	time.Sleep(time.Second * 1000)

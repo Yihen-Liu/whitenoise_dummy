@@ -124,7 +124,6 @@ func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error
 	return nil
 }
 
-
 func readData(rw *bufio.ReadWriter) {
 	for {
 		str, err := rw.ReadString('\n')
