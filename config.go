@@ -4,13 +4,6 @@ import (
 	"flag"
 )
 
-//type NetworkConfig struct {
-//}
-//
-//func NewConfig() {
-//
-//}
-
 type NetworkConfig struct {
 	RendezvousString string
 	ProtocolID       string

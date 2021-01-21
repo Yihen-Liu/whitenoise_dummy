@@ -1,0 +1,31 @@
+syntax = "proto3";
+package pb;
+
+message Relay {
+  bytes id = 1;
+  relaytype type = 2;
+  bytes data = 3;
+}
+
+enum relaytype {
+  SetSessionId = 0;
+  Ack = 1;
+  Data = 2;
+  Disconnect = 3;
+}
+
+message setSessionIdMsg {
+  string sessionId = 1;
+}
+
+message ackMsg {
+  bytes id = 1;
+  bool res = 2;
+}
+
+
+message disconnect{
+  string sessionId = 1;
+}
+
+

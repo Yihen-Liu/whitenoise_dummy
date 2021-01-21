@@ -51,7 +51,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 	if err != nil {
 		log.Error("New service err: ", err)
 	}
-	service.host.SetStreamHandler(protocol.ID(WHITENOISE_PROTOCOL), service.StreamHandler)
+	service.host.SetStreamHandler(protocol.ID(RELAY_PROTOCOL), service.RelayStreamHandler)
 	return &service, nil
 }
 
@@ -70,7 +70,7 @@ func (service *NetworkService) Start() {
 }
 
 func (service *NetworkService) NewWhiteNoiseStream(peerID core.PeerID) (string, error) {
-	stream, err := service.host.NewStream(service.ctx, peerID, protocol.ID(WHITENOISE_PROTOCOL))
+	stream, err := service.host.NewStream(service.ctx, peerID, protocol.ID(RELAY_PROTOCOL))
 	if err != nil {
 		log.Infof("newstream to %v error: %v\n", peerID, err)
 		return "", err
@@ -78,7 +78,7 @@ func (service *NetworkService) NewWhiteNoiseStream(peerID core.PeerID) (string, 
 	log.Info("gen new stream: ", stream.ID())
 	s := NewStream(stream)
 	service.SessionMapper.AddSessionNonid(s)
-	go service.InboundHandler(s)
+	go service.RelayInboundHandler(s)
 	log.Infof("Connected to:%v \n", peerID)
 	_, err = s.RW.Write(NewMsg([]byte("hi")))
 	if err != nil {

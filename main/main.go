@@ -8,10 +8,6 @@ import (
 )
 import "whitenoise"
 
-func init() {
-	log.Init(log.PATH, log.Stdout)
-}
-
 func main() {
 	ctx := context.Background()
 	cfg := whitenoise.NewConfig()

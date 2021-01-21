@@ -467,10 +467,10 @@ func FileOpen(path string) (*os.File, error) {
 }
 
 //Init deprecated, use InitLog instead
-func Init(a ...interface{}) {
-	os.Stderr.WriteString("warning: use of deprecated Init. Use InitLog instead\n")
-	InitLog(InfoLog, a...)
-}
+//func Init(a ...interface{}) {
+//	os.Stderr.WriteString("warning: use of deprecated Init. Use InitLog instead\n")
+//	InitLog(InfoLog, a...)
+//}
 
 func InitLog(logLevel int, a ...interface{}) {
 	writers := []io.Writer{}

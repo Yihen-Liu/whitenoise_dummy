@@ -1,0 +1,13 @@
+syntax = "proto3";
+package pb;
+
+message negotiate {
+  bytes id = 1;
+  bytes detail = 2;
+}
+
+message detail {
+  string join = 1;
+  string sessionId = 2;
+  bytes sig = 3;
+}

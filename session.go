@@ -3,6 +3,7 @@ package whitenoise
 import (
 	"bufio"
 	"errors"
+	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/network"
 )
 
@@ -18,14 +19,16 @@ type Session struct {
 type StreamPair []Stream
 
 type Stream struct {
-	StreamId string
-	RW       *bufio.ReadWriter
+	StreamId   string
+	RemotePeer core.PeerID
+	RW         *bufio.ReadWriter
 }
 
 func NewStream(s network.Stream) Stream {
 	return Stream{
-		StreamId: s.ID(),
-		RW:       bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s)),
+		StreamId:   s.ID(),
+		RW:         bufio.NewReadWriter(bufio.NewReader(s), bufio.NewWriter(s)),
+		RemotePeer: s.Conn().RemotePeer(),
 	}
 }
 

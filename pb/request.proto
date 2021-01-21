@@ -1,0 +1,23 @@
+syntax = "proto3";
+package pb;
+
+message request {
+  bytes id = 1;
+  string from = 2;
+}
+
+enum reqtype {
+  GetOnlineAgents = 0;
+  NewAgent = 1;
+  NewCircuit = 2;
+}
+
+message newCircuit {
+  string to = 1;
+
+}
+
+message newAgent {
+  bytes time = 1;
+}
+

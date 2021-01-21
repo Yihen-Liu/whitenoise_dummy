@@ -23,7 +23,7 @@ type GossipMsg struct {
 
 func (service *NetworkService) NewPubsubService() error {
 	ctx, _ := context.WithCancel(service.ctx)
-	ps, err := pubsub.NewGossipSub(ctx, service.host)
+	ps, err := pubsub.NewGossipSub(ctx, service.host, pubsub.WithNoAuthor()) //pubsub omit from,dig and change default id
 	if err != nil {
 		log.Error("NewPubsubService err: ", err)
 		return err
