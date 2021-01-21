@@ -7,6 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"io"
 	"os"
+	"whitenoise/log"
 	"whitenoise/pb"
 )
 
@@ -38,14 +39,14 @@ func (service *NetworkService) InboundHandler(s Stream) {
 		msgBytes := make([]byte, l)
 		_, err = io.ReadFull(s.RW, msgBytes)
 		if err != nil {
-			println("payload not enough bytes")
+			log.Info("payload not enough bytes")
 			continue
 		}
 
 		var payload pb.Payload = pb.Payload{}
 		err = proto.Unmarshal(msgBytes, &payload)
 		if err != nil {
-			println("unmarshal err", err)
+			log.Error("unmarshal err", err)
 			continue
 		}
 		//TODO:add command dispatch
@@ -55,39 +56,39 @@ func (service *NetworkService) InboundHandler(s Stream) {
 				continue
 			} else {
 				//HandleRelay
-				println("Handling relay")
+				log.Info("Handling relay")
 				session, ok := service.SessionMapper.SessionmapID[payload.SessionId]
 				if ok {
 					if session.IsReady() {
 						part, err := session.GetPattern(s.StreamId)
 						if err != nil {
-							println("get part err", err)
+							log.Error("get part err", err)
 							continue
 						}
 						relay := NewRelay(payload.Data, payload.SessionId)
 						_, err = part.RW.Write(relay)
 						if err != nil {
-							println("write err", err)
+							log.Error("write err", err)
 							continue
 						}
 						err = part.RW.Flush()
 						if err != nil {
-							println("flush err", err)
+							log.Error("flush err", err)
 							continue
 						}
 					} else {
 						//TODO:give relay msg to client for relay node
-						fmt.Printf("maybe endpoint %v\n", string(payload.Data))
+						log.Infof("maybe endpoint %v\n", string(payload.Data))
 					}
 				} else {
-					println("relay no such session")
+					log.Warn("relay no such session")
 				}
 			}
 
 		} else {
 			err = service.handleCommand(&payload, s)
 			if err != nil {
-				println("handle command err: ", err)
+				log.Error("handle command err: ", err)
 				continue
 			}
 		}
@@ -95,7 +96,7 @@ func (service *NetworkService) InboundHandler(s Stream) {
 }
 
 func (service NetworkService) handleMsg(payload *pb.Payload, s Stream) {
-	fmt.Printf("Receive msg:%v\n", string(payload.Data))
+	log.Infof("Receive msg:%v\n", string(payload.Data))
 }
 
 func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error {
@@ -106,22 +107,23 @@ func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error
 	}
 	session.AddStream(s)
 	service.SessionMapper.AddSessionId(payload.SessionId, session)
-	fmt.Printf("add sessionid %v to stream %v\n", payload.SessionId, s.StreamId)
-	fmt.Printf("session: %v\n", session)
+	log.Infof("add sessionid %v to stream %v\n", payload.SessionId, s.StreamId)
+	log.Infof("session: %v\n", session)
 
 	reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
 	_, err := s.RW.Write(reply)
 	if err != nil {
-		println("write err", err)
+		log.Error("write err", err)
 		return err
 	}
 	err = s.RW.Flush()
 	if err != nil {
-		println("flush err", err)
+		log.Error("flush err", err)
 		return err
 	}
 	return nil
 }
+
 
 func readData(rw *bufio.ReadWriter) {
 	for {

@@ -2,12 +2,12 @@ package whitenoise
 
 import (
 	"context"
-	"fmt"
 	core "github.com/libp2p/go-libp2p-core"
-	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/p2p/discovery"
 	"time"
+	"whitenoise/log"
 )
 
 type discoveryNotifee struct {
@@ -23,8 +23,7 @@ type Discovery struct {
 func (self *Discovery) run() {
 	for {
 		peer := <-self.peerChan
-		fmt.Printf("get peer:%v\n", peer.ID)
-		//println("get peer:", peer.ID)
+		log.Infof("get peer:%v\n", peer.ID)
 		_, ok := self.peerMap[peer.ID]
 		if !ok {
 			self.event <- peer
@@ -32,7 +31,6 @@ func (self *Discovery) run() {
 		self.peerMap[peer.ID] = peer
 	}
 }
-
 
 //interface to be called when new  peer is found
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {

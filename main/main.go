@@ -4,8 +4,13 @@ import (
 	"context"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"time"
+	"whitenoise/log"
 )
 import "whitenoise"
+
+func init() {
+	log.Init(log.PATH, log.Stdout)
+}
 
 func main() {
 	ctx := context.Background()

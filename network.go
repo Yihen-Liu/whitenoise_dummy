@@ -13,12 +13,13 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 	noise "github.com/libp2p/go-libp2p-noise"
 	"github.com/multiformats/go-multiaddr"
+	"whitenoise/log"
 )
 
 type NetworkService struct {
 	host          host.Host
 	ctx           context.Context
-	peerMap       Discovery
+	discovery     Discovery
 	SessionMapper SessionManager
 	inboundEvent  chan InboundEvent
 }
@@ -26,7 +27,7 @@ type NetworkService struct {
 func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
 	err := service.host.Connect(service.ctx, peer)
 	if err != nil {
-		fmt.Printf("connect to %v error: %v", peer.ID, err)
+		log.Errorf("connect to %v error: %v", peer.ID, err)
 	} else {
 	}
 }
@@ -37,7 +38,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 	service := NetworkService{
 		host: host,
 		ctx:  ctx,
-		peerMap: Discovery{
+		discovery: Discovery{
 			peerMap:  make(map[core.PeerID]core.PeerAddrInfo),
 			peerChan: peerChan,
 			event:    make(chan core.PeerAddrInfo),
@@ -50,12 +51,11 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 }
 
 func (service *NetworkService) Start() {
-	fmt.Printf("start service %v\n", peer.Encode(service.host.ID()))
-	//println("start service: ",service.host.ID())
-	go service.peerMap.run()
+	log.Infof("start service %v\n", peer.Encode(service.host.ID()))
+	go service.discovery.run()
 	go func() {
 		for {
-			peer := <-service.peerMap.event
+			peer := <-service.discovery.event
 			service.TryConnect(peer)
 			//service.NewWhiteNoiseStream(peer.ID)
 		}
@@ -65,22 +65,22 @@ func (service *NetworkService) Start() {
 func (service *NetworkService) NewWhiteNoiseStream(peerID core.PeerID) (string, error) {
 	stream, err := service.host.NewStream(service.ctx, peerID, protocol.ID(WHITENOISE_PROTOCOL))
 	if err != nil {
-		fmt.Printf("newstream to %v error: %v\n", peerID, err)
+		log.Infof("newstream to %v error: %v\n", peerID, err)
 		return "", err
 	}
-	fmt.Println("gen new stream: ", stream.ID())
+	log.Info("gen new stream: ", stream.ID())
 	s := NewStream(stream)
 	service.SessionMapper.AddSessionNonid(s)
 	go service.InboundHandler(s)
-	fmt.Printf("Connected to:%v \n", peerID)
+	log.Infof("Connected to:%v \n", peerID)
 	_, err = s.RW.Write(NewMsg([]byte("hi")))
 	if err != nil {
-		println("write err", err)
+		log.Error("write err", err)
 		return "", err
 	}
 	err = s.RW.Flush()
 	if err != nil {
-		println("flush err", err)
+		log.Error("flush err", err)
 		return "", err
 	}
 	return s.StreamId, nil
@@ -105,19 +105,19 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 		}
 		s.AddStream(stream)
 		service.SessionMapper.AddSessionId(sessionID, s)
-		fmt.Printf("session: %v\n", s)
+		log.Infof("session: %v\n", s)
 	} else {
 		return errors.New("no such stream:" + streamID)
 	}
 
 	_, err := stream.RW.Write(NewSetSessionIDCommand(sessionID, streamID))
 	if err != nil {
-		println("write err", err)
+		log.Error("write err", err)
 		return err
 	}
 	err = stream.RW.Flush()
 	if err != nil {
-		println("flush err", err)
+		log.Error("flush err", err)
 		return err
 	}
 	return nil
@@ -126,18 +126,18 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 func (service *NetworkService) SendRelay(sessionid string, data []byte) {
 	session, ok := service.SessionMapper.SessionmapID[sessionid]
 	if !ok {
-		println("SendRelay no such session")
+		log.Info("SendRelay no such session")
 	}
 	payload := NewRelay(data, sessionid)
 	for _, stream := range session.GetPair() {
 		_, err := stream.RW.Write(payload)
 		if err != nil {
-			println("write err", err)
+			log.Error("write err", err)
 			return
 		}
 		err = stream.RW.Flush()
 		if err != nil {
-			println("flush err", err)
+			log.Error("flush err", err)
 			return
 		}
 	}

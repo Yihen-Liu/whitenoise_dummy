@@ -104,7 +104,3 @@ func (man *SessionManager) AddSessionNonid(s Stream) {
 func (man *SessionManager) AddSessionId(id string, s Session) {
 	man.SessionmapID[id] = s
 }
-
-func (service *NetworkService) ConnectStream(s *Session) {
-
-}
