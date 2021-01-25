@@ -1,6 +1,7 @@
 package whitenoise
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
 	"whitenoise/pb"
@@ -26,15 +27,19 @@ func Bytes2Int(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b)
 }
 
-func NewSetSessionIDCommand(sessionID string, streamID string) []byte {
+func NewSetSessionIDCommand(sessionID string, streamID string) ([]byte,string) {
 	payload := pb.Payload{
 		SessionCmd: true,
 		SessionId:  sessionID,
 		StreamId:   streamID,
 		Data:       []byte{},
+		Id:         "",
 	}
+	noId, _ := proto.Marshal(&payload)
+	hash := sha256.Sum256(noId)
+	payload.Id = EncodeID(hash[:])
 	comd, _ := proto.Marshal(&payload)
-	return EncodePayload(comd)
+	return EncodePayload(comd),payload.Id
 }
 
 func NewMsg(data []byte) []byte {

@@ -2,7 +2,7 @@ syntax = "proto3";
 package pb;
 
 message negotiate {
-  bytes id = 1;
+  string id = 1;
   string join = 2; //join at this peerid
   string sessionId = 3;
   string destination = 4;

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/golang/protobuf/proto"
+	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/network"
 	"io"
 	"os"
@@ -87,7 +88,7 @@ func (service *NetworkService) RelayInboundHandler(s Stream) {
 			}
 
 		} else {
-			err = service.handleCommand(&payload, s)
+			err = service.handleSetSession(&payload, s)
 			if err != nil {
 				log.Error("handle command err: ", err)
 				continue
@@ -97,11 +98,11 @@ func (service *NetworkService) RelayInboundHandler(s Stream) {
 	}
 }
 
-func (service NetworkService) handleMsg(payload *pb.Payload, s Stream) {
+func (service *NetworkService) handleMsg(payload *pb.Payload, s Stream) {
 	log.Infof("Receive msg:%v\n", string(payload.Data))
 }
 
-func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error {
+func (service *NetworkService) handleSetSession(payload *pb.Payload, s Stream) error {
 	session, ok := service.SessionMapper.SessionmapID[payload.SessionId]
 	if !ok {
 		session = NewSession()
@@ -112,13 +113,33 @@ func (service NetworkService) handleCommand(payload *pb.Payload, s Stream) error
 	log.Infof("add sessionid %v to stream %v\n", payload.SessionId, s.StreamId)
 	log.Infof("session: %v\n", session)
 
-	reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
-	_, err := s.RW.Write(reply)
+	//reply := NewMsg([]byte("Reply add sessionid " + payload.SessionId + " to stream" + s.StreamId))
+	//ack
+	stream, err := service.host.NewStream(service.ctx, s.RemotePeer, core.ProtocolID(ACK_PROTOCOL))
+	if err != nil {
+		log.Errorf("handleSetSession new stream err %v", err)
+		return err
+	}
+	resStream := NewStream(stream)
+	var ack = pb.Ack{
+		CommandId: payload.Id,
+		Result:    true,
+		Data:      []byte{},
+	}
+
+	data, err := proto.Marshal(&ack)
+	if err != nil {
+		return err
+	}
+
+	encoded := EncodePayload(data)
+
+	_, err = resStream.RW.Write(encoded)
 	if err != nil {
 		log.Error("write err", err)
 		return err
 	}
-	err = s.RW.Flush()
+	err = resStream.RW.Flush()
 	if err != nil {
 		log.Error("flush err", err)
 		return err

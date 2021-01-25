@@ -23,19 +23,13 @@ func main() {
 	///for testing
 	if cfg.Session != "" {
 		time.Sleep(time.Second * 2)
-		//i := 0
-		//for _, v := range service.SessionMapper.StreamMap {
-		//	println("start set session id")
-		//	service.SetSessionId("hello"+string(rune(i)), v.StreamId)
-		//	i++
-		//}
 		id, err := peer.Decode(cfg.Session)
 		if err != nil {
-			println(err)
+			log.Error(err)
 		}
 		err = service.NewSessionToPeer(id, "hello")
 		if err != nil {
-			println(err)
+			log.Error(err)
 		}
 	}
 
@@ -53,7 +47,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-
 	}
 
 	if cfg.Des != "" && cfg.Join != "" {
@@ -78,9 +71,6 @@ func main() {
 
 	if cfg.Relay {
 		time.Sleep(time.Second * 5)
-		//for _, session := range service.SessionMapper.SessionmapID {
-		//	service.SendRelay(session.Id, []byte("Hi..Hi..Hi.."))
-		//}
 		service.SendRelay("hello", []byte("HoHoHo!"))
 	}
 

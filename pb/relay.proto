@@ -24,8 +24,5 @@ message ackMsg {
 }
 
 
-message disconnect{
-  string sessionId = 1;
-}
 
 

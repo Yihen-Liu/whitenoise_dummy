@@ -13,7 +13,7 @@ const SESSIONIDNON string = "SessionIDNon"
 type Session struct {
 	Id   string
 	pair StreamPair
-	Out  bool
+	Out  bool //mark if host the in/exit point of the circuit
 }
 
 type StreamPair []Stream
@@ -45,6 +45,9 @@ func (s *Session) SetSessionID(sID string) {
 }
 
 func (s *Session) AddStream(stream Stream) {
+	if s.IsReady() {
+		return
+	}
 	s.pair = append(s.pair, stream)
 	for {
 		if len(s.pair) > 2 {

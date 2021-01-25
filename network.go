@@ -15,10 +15,13 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 	noise "github.com/libp2p/go-libp2p-noise"
 	"github.com/multiformats/go-multiaddr"
-	"io"
+	"time"
 	"whitenoise/log"
 	"whitenoise/pb"
 )
+
+const SETSESSIONTIMEOUT time.Duration = time.Second
+const EXPENDSESSIONTIMEOUT time.Duration = time.Second * 3
 
 type NetworkService struct {
 	host          host.Host
@@ -27,6 +30,7 @@ type NetworkService struct {
 	SessionMapper SessionManager
 	inboundEvent  chan InboundEvent
 	PubsubService *PubsubService
+	AckManager    *AckManager
 }
 
 func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
@@ -50,6 +54,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 		},
 		SessionMapper: NewSessionMapper(),
 		inboundEvent:  make(chan InboundEvent),
+		AckManager:    NewAckManager(),
 	}
 	err := service.NewPubsubService()
 	if err != nil {
@@ -57,6 +62,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 	}
 	service.host.SetStreamHandler(protocol.ID(RELAY_PROTOCOL), service.RelayStreamHandler)
 	service.host.SetStreamHandler(protocol.ID(CMD_PROTOCOL), service.CmdStreamHandler)
+	service.host.SetStreamHandler(protocol.ID(ACK_PROTOCOL), service.AckManager.AckStreamHandler)
 	return &service, nil
 }
 
@@ -69,7 +75,6 @@ func (service *NetworkService) Start() {
 		for {
 			peer := <-service.discovery.event
 			service.TryConnect(peer)
-			//service.NewRelayStream(peer.ID)
 		}
 	}()
 }
@@ -122,7 +127,8 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 		return errors.New("no such stream:" + streamID)
 	}
 
-	_, err := stream.RW.Write(NewSetSessionIDCommand(sessionID, streamID))
+	data, id := NewSetSessionIDCommand(sessionID, streamID)
+	_, err := stream.RW.Write(data)
 	if err != nil {
 		log.Error("write err", err)
 		return err
@@ -132,33 +138,22 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 		log.Error("flush err", err)
 		return err
 	}
+	res := Task{
+		Id:      id,
+		channel: make(chan bool),
+	}
+	service.AckManager.TaskMap[id] = res
 
-	//waiting for res
-	lBytes := make([]byte, 4)
-	_, err = io.ReadFull(stream.RW, lBytes)
-	if err != nil {
-		log.Errorf("ReadFull len err: %v", err)
+	defer delete(service.AckManager.TaskMap, id)
+	select {
+	case <-time.After(SETSESSIONTIMEOUT):
+		err := errors.New("timeout")
 		return err
+	case ok := <-res.channel:
+		if !ok {
+			return errors.New("cmd rejected")
+		}
 	}
-
-	l := Bytes2Int(lBytes)
-	msgBytes := make([]byte, l)
-	_, err = io.ReadFull(stream.RW, msgBytes)
-	if err != nil {
-		log.Errorf("ReadFull msg err: %v", err)
-		return err
-	}
-	var ack = pb.Ack{}
-	err = proto.Unmarshal(msgBytes, &ack)
-	if err != nil {
-		log.Errorf("Unmarshal ack err: %v", err)
-		return err
-	}
-	if !ack.Result {
-		return errors.New("ack flase " + string(ack.Data))
-	}
-
-	//
 	return nil
 }
 
@@ -198,7 +193,7 @@ func (service *NetworkService) ExpendSession(to core.PeerID, expend core.PeerID,
 		return err
 	}
 	payload := pb.Command{
-		CommandId: []byte{},
+		CommandId: "",
 		Type:      pb.Cmdtype_SessionExPend,
 		From:      service.host.ID().String(),
 		Data:      cmdData,
@@ -208,7 +203,7 @@ func (service *NetworkService) ExpendSession(to core.PeerID, expend core.PeerID,
 		return err
 	}
 	hash := sha256.Sum256(payloadNoId)
-	payload.CommandId = hash[:]
+	payload.CommandId = EncodeID(hash[:])
 
 	data, err := proto.Marshal(&payload)
 	if err != nil {
@@ -224,12 +219,26 @@ func (service *NetworkService) ExpendSession(to core.PeerID, expend core.PeerID,
 	if err != nil {
 		return err
 	}
+	task := Task{
+		Id:      payload.CommandId,
+		channel: make(chan bool),
+	}
+	service.AckManager.TaskMap[payload.CommandId] = task
+	defer delete(service.AckManager.TaskMap, payload.CommandId)
+	select {
+	case <-time.After(EXPENDSESSIONTIMEOUT):
+		return errors.New("timeout")
+	case ok := <-task.channel:
+		if !ok {
+			return errors.New("cmd rejected")
+		}
+	}
 	return nil
 }
 
 func (service *NetworkService) GossipJoint(des peer.ID, join peer.ID, sessionId string) error {
 	var neg = pb.Negotiate{
-		Id:          []byte{},
+		Id:          "",
 		Join:        join.String(),
 		SessionId:   sessionId,
 		Destination: des.String(),
@@ -241,12 +250,12 @@ func (service *NetworkService) GossipJoint(des peer.ID, join peer.ID, sessionId 
 		return err
 	}
 	hash := sha256.Sum256(negNoID)
-	neg.Id = hash[:]
+	neg.Id = EncodeID(hash[:])
 	data, err := proto.Marshal(&neg)
 	if err != nil {
 		return err
 	}
-	//encoded := EncodePayload(data)
+
 	err = service.PubsubService.Publish(data)
 	if err != nil {
 		return err

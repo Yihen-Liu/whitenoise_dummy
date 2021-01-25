@@ -6,4 +6,5 @@ message Payload {
   string session_id = 2;
   string stream_id = 3;
   bytes data = 4;
+  string id = 5;
 }
