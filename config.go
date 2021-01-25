@@ -11,7 +11,10 @@ type NetworkConfig struct {
 	listenPort       int
 	Session          string
 	Relay            bool
-	Pub          string
+	Pub              string
+	Expend           string
+	Des              string
+	Join             string
 }
 
 func NewConfig() *NetworkConfig {
@@ -25,8 +28,11 @@ func parseFlags() *NetworkConfig {
 	flag.StringVar(&c.ProtocolID, "pid", "whitenoise", "Sets a protocol id for stream headers")
 	flag.IntVar(&c.listenPort, "port", 4001, "node listen port")
 	flag.StringVar(&c.Session, "session", "", "test session peerId")
-	flag.StringVar(&c.Pub,"pub","","test gossip pubsub")
+	flag.StringVar(&c.Pub, "pub", "", "test gossip pubsub")
 	flag.BoolVar(&c.Relay, "relay", false, "test relay")
+	flag.StringVar(&c.Expend, "expend", "", "test session expend")
+	flag.StringVar(&c.Des, "des", "", "gossip destination peerid")
+	flag.StringVar(&c.Join, "join", "", "gossip join node peerid")
 	flag.Parse()
 	return c
 }

@@ -15,7 +15,7 @@ type discoveryNotifee struct {
 }
 
 type Discovery struct {
-	peerMap  map[core.PeerID]core.PeerAddrInfo
+	PeerMap  map[core.PeerID]core.PeerAddrInfo
 	peerChan chan core.PeerAddrInfo
 	event    chan core.PeerAddrInfo
 }
@@ -24,11 +24,11 @@ func (self *Discovery) run() {
 	for {
 		peer := <-self.peerChan
 		log.Infof("get peer:%v\n", peer.ID)
-		_, ok := self.peerMap[peer.ID]
+		_, ok := self.PeerMap[peer.ID]
 		if !ok {
 			self.event <- peer
 		}
-		self.peerMap[peer.ID] = peer
+		self.PeerMap[peer.ID] = peer
 	}
 }
 

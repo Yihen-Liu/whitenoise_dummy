@@ -49,6 +49,7 @@ func (service *NetworkService) RelayInboundHandler(s Stream) {
 			log.Error("unmarshal err", err)
 			continue
 		}
+
 		//TODO:add command dispatch
 		if !payload.SessionCmd {
 			if payload.SessionId == "" {
@@ -92,6 +93,7 @@ func (service *NetworkService) RelayInboundHandler(s Stream) {
 				continue
 			}
 		}
+
 	}
 }
 
