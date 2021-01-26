@@ -16,7 +16,12 @@ type AckManager struct {
 
 type Task struct {
 	Id      string
-	channel chan bool
+	channel chan Result
+}
+
+type Result struct {
+	ok   bool
+	data []byte
 }
 
 func NewAckManager() *AckManager {
@@ -52,5 +57,17 @@ func (manager *AckManager) AckStreamHandler(stream network.Stream) {
 		return
 	}
 
-	task.channel <- ack.Result
+	task.channel <- Result{
+		ok:   ack.Result,
+		data: ack.Data,
+	}
+}
+
+func (manager *AckManager) AddTask(id string) chan Result {
+	task := Task{
+		Id:      id,
+		channel: make(chan Result),
+	}
+	manager.TaskMap[id] = task
+	return task.channel
 }

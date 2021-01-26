@@ -2,22 +2,26 @@ syntax = "proto3";
 package pb;
 
 message request {
-  bytes id = 1;
+  string reqId = 1;
   string from = 2;
+  reqtype reqtype = 3;
+  bytes data = 4;
 }
 
 enum reqtype {
-  GetOnlineAgents = 0;
-  NewAgent = 1;
+  GetOnlineNodes = 0;
+  NewProxy = 1;
   NewCircuit = 2;
 }
 
 message newCircuit {
   string to = 1;
-
+  string sessionId = 2;
 }
 
-message newAgent {
-  bytes time = 1;
+message newProxy {
+  string time = 1;
+  string idHash = 2;
 }
+
 

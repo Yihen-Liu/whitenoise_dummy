@@ -22,6 +22,8 @@ import (
 
 const SETSESSIONTIMEOUT time.Duration = time.Second
 const EXPENDSESSIONTIMEOUT time.Duration = time.Second * 3
+const REGISTERPROXYTIMEOUT time.Duration = time.Second
+const NEWCIRCUITTIMEOUT time.Duration = time.Second * 5
 
 type NetworkService struct {
 	host          host.Host
@@ -31,6 +33,8 @@ type NetworkService struct {
 	inboundEvent  chan InboundEvent
 	PubsubService *PubsubService
 	AckManager    *AckManager
+	proxyService  *ProxyService
+	ProxyNode     core.PeerID
 }
 
 func (service *NetworkService) TryConnect(peer core.PeerAddrInfo) {
@@ -55,6 +59,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 		SessionMapper: NewSessionMapper(),
 		inboundEvent:  make(chan InboundEvent),
 		AckManager:    NewAckManager(),
+		proxyService:  NewProxyService(),
 	}
 	err := service.NewPubsubService()
 	if err != nil {
@@ -63,6 +68,7 @@ func NewService(ctx context.Context, host host.Host, cfg *NetworkConfig) (*Netwo
 	service.host.SetStreamHandler(protocol.ID(RELAY_PROTOCOL), service.RelayStreamHandler)
 	service.host.SetStreamHandler(protocol.ID(CMD_PROTOCOL), service.CmdStreamHandler)
 	service.host.SetStreamHandler(protocol.ID(ACK_PROTOCOL), service.AckManager.AckStreamHandler)
+	service.host.SetStreamHandler(protocol.ID(PROXY_PROTOCOL), service.ProxyStreamHandler)
 	return &service, nil
 }
 
@@ -73,8 +79,9 @@ func (service *NetworkService) Start() {
 	go service.PubsubService.HandleGossipMsg()
 	go func() {
 		for {
-			peer := <-service.discovery.event
-			service.TryConnect(peer)
+			event := <-service.discovery.event
+			log.Infof("discover %v", event.ID)
+			//service.TryConnect(peer)
 		}
 	}()
 }
@@ -140,7 +147,7 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 	}
 	res := Task{
 		Id:      id,
-		channel: make(chan bool),
+		channel: make(chan Result),
 	}
 	service.AckManager.TaskMap[id] = res
 
@@ -149,12 +156,13 @@ func (service *NetworkService) SetSessionId(sessionID string, streamID string) e
 	case <-time.After(SETSESSIONTIMEOUT):
 		err := errors.New("timeout")
 		return err
-	case ok := <-res.channel:
-		if !ok {
-			return errors.New("cmd rejected")
+	case result := <-res.channel:
+		if result.ok {
+			return nil
+		} else {
+			return errors.New("cmd rejected: " + string(result.data))
 		}
 	}
-	return nil
 }
 
 func (service *NetworkService) SendRelay(sessionid string, data []byte) {
@@ -221,27 +229,132 @@ func (service *NetworkService) ExpendSession(to core.PeerID, expend core.PeerID,
 	}
 	task := Task{
 		Id:      payload.CommandId,
-		channel: make(chan bool),
+		channel: make(chan Result),
 	}
 	service.AckManager.TaskMap[payload.CommandId] = task
 	defer delete(service.AckManager.TaskMap, payload.CommandId)
 	select {
 	case <-time.After(EXPENDSESSIONTIMEOUT):
 		return errors.New("timeout")
-	case ok := <-task.channel:
-		if !ok {
-			return errors.New("cmd rejected")
+	case result := <-task.channel:
+		if result.ok {
+			return nil
+		} else {
+			return errors.New("cmd rejected: " + string(result.data))
+		}
+	}
+}
+
+func (service *NetworkService) RegisterProxy(proxyId core.PeerID) error {
+	streamRaw, err := service.host.NewStream(service.ctx, proxyId, protocol.ID(PROXY_PROTOCOL))
+	if err != nil {
+		return err
+	}
+	stream := NewStream(streamRaw)
+	hash := sha256.Sum256([]byte(service.host.ID().String()))
+	newProxy := pb.NewProxy{
+		Time:   time.Hour.String(),
+		IdHash: EncodeID(hash[:]),
+	}
+	data, err := proto.Marshal(&newProxy)
+	if err != nil {
+		return err
+	}
+	request := pb.Request{
+		ReqId:   "",
+		From:    service.host.ID().String(),
+		Reqtype: pb.Reqtype_NewProxy,
+		Data:    data,
+	}
+	noID, err := proto.Marshal(&request)
+	if err != nil {
+		return err
+	}
+	hash = sha256.Sum256(noID)
+	request.ReqId = EncodeID(hash[:])
+	reqData, err := proto.Marshal(&request)
+
+	_, err = stream.RW.Write(EncodePayload(reqData))
+	if err != nil {
+		return err
+	}
+	err = stream.RW.Flush()
+	if err != nil {
+		return err
+	}
+
+	resChan := service.AckManager.AddTask(request.ReqId)
+	defer delete(service.AckManager.TaskMap, request.ReqId)
+	select {
+	case <-time.After(REGISTERPROXYTIMEOUT):
+		return errors.New("timeout")
+	case result := <-resChan:
+		if !result.ok {
+			return errors.New("register rejected: " + string(result.data))
+		}
+	}
+	service.ProxyNode = proxyId
+	log.Infof("Register to proxy %v", proxyId)
+	return nil
+}
+
+func (service *NetworkService) NewCircuit(des core.PeerID, sessionId string) error {
+	streamRaw, err := service.host.NewStream(service.ctx, service.ProxyNode, protocol.ID(PROXY_PROTOCOL))
+	if err != nil {
+		return err
+	}
+	stream := NewStream(streamRaw)
+
+	hashID := sha256.Sum256([]byte(des.String()))
+	newCircuit := pb.NewCircuit{
+		To:        EncodeID(hashID[:]),
+		SessionId: sessionId,
+	}
+
+	data, err := proto.Marshal(&newCircuit)
+	if err != nil {
+		return err
+	}
+
+	request := pb.Request{
+		ReqId:   "",
+		From:    service.host.ID().String(),
+		Reqtype: pb.Reqtype_NewCircuit,
+		Data:    data,
+	}
+	noId, err := proto.Marshal(&request)
+	hash := sha256.Sum256(noId[:])
+	request.ReqId = EncodeID(hash[:])
+	reqData, err := proto.Marshal(&request)
+
+	_, err = stream.RW.Write(EncodePayload(reqData))
+	if err != nil {
+		return err
+	}
+	err = stream.RW.Flush()
+	if err != nil {
+		return err
+	}
+
+	resChan := service.AckManager.AddTask(request.ReqId)
+	defer delete(service.AckManager.TaskMap, request.ReqId)
+	select {
+	case <-time.After(NEWCIRCUITTIMEOUT):
+		return errors.New("timeout")
+	case result := <-resChan:
+		if !result.ok {
+			return errors.New("new circuit rejected: " + string(result.data))
 		}
 	}
 	return nil
 }
 
-func (service *NetworkService) GossipJoint(des peer.ID, join peer.ID, sessionId string) error {
+func (service *NetworkService) GossipJoint(desHash string, join peer.ID, sessionId string) error {
 	var neg = pb.Negotiate{
 		Id:          "",
 		Join:        join.String(),
 		SessionId:   sessionId,
-		Destination: des.String(),
+		Destination: desHash,
 		Sig:         []byte{},
 	}
 

@@ -15,6 +15,8 @@ type NetworkConfig struct {
 	Expend           string
 	Des              string
 	Join             string
+	Proxy            string
+	Circuit          string
 }
 
 func NewConfig() *NetworkConfig {
@@ -33,6 +35,8 @@ func parseFlags() *NetworkConfig {
 	flag.StringVar(&c.Expend, "expend", "", "test session expend")
 	flag.StringVar(&c.Des, "des", "", "gossip destination peerid")
 	flag.StringVar(&c.Join, "join", "", "gossip join node peerid")
+	flag.StringVar(&c.Proxy,"proxy","","Register proxy")
+	flag.StringVar(&c.Circuit,"circuit","","New circuit")
 	flag.Parse()
 	return c
 }

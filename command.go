@@ -86,8 +86,8 @@ func (s *NetworkService) CmdStreamHandler(stream network.Stream) {
 			break
 		}
 		if session.IsReady() {
-			log.Warnf("Session is ready, cant expend %v", cmd.SessionId)
-			ack.Data = []byte("Session is ready")
+			log.Warnf("Session is ready, ack as both joint and relay", cmd.SessionId)
+			ack.Result = true
 			data, err := proto.Marshal(&ack)
 			if err != nil {
 				break
@@ -101,7 +101,6 @@ func (s *NetworkService) CmdStreamHandler(stream network.Stream) {
 			if err != nil {
 				break
 			}
-			break
 			break
 		}
 		id, err := peer.Decode(cmd.PeerId)

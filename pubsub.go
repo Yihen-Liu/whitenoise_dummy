@@ -6,7 +6,6 @@ import (
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"time"
 	"whitenoise/log"
 	"whitenoise/pb"
 )
@@ -92,43 +91,51 @@ func (service *PubsubService) HandleGossipMsg() {
 			log.Errorf("Unmarshall gossip error: %v", err)
 			continue
 		}
-		destination, err := peer.Decode(neg.Destination)
-		if err != nil {
-			log.Errorf("Decode destination error: %v", err)
+
+		clientInfo, ok := service.network.proxyService.ClientMap[neg.Destination]
+		if !ok {
+			log.Info("Gossip not for my client")
 			continue
 		}
-		if destination != service.network.host.ID() {
-			log.Info("Gossip not for me")
-			continue
+
+		if _, ok := service.network.SessionMapper.SessionmapID[neg.SessionId]; ok {
+			log.Warnf("session already exist %v", neg.SessionId)
 		}
-		_, ok := service.network.SessionMapper.SessionmapID[neg.SessionId]
-		if ok {
-			log.Errorf("session already exist %v", neg.SessionId)
-		}
+
 		joinNode, err := peer.Decode(neg.Join)
 		var relayId core.PeerID
-		for id, _ := range service.network.discovery.PeerMap {
-			//todo:筛选中继节点，避免入口节点作为中继节点
-			if id != joinNode {
-				relayId = id
-				break
+
+		if joinNode != service.network.host.ID() {
+			for id, _ := range service.network.discovery.PeerMap {
+				//todo:筛选中继节点，避免入口节点作为中继节点
+				if id != joinNode {
+					relayId = id
+					break
+				}
 			}
+
+			//todo：错误处理（重试）
+			//new session to relay
+			err = service.network.NewSessionToPeer(relayId, neg.SessionId)
+			if err != nil {
+				log.Errorf("New session to relay err %v", err)
+				continue
+			}
+
+			err = service.network.ExpendSession(relayId, joinNode, neg.SessionId)
+			if err != nil {
+				log.Errorf("Expend session err %v", err)
+				continue
+			}
+		}else {
+			log.Info("act as both joint and exit")
 		}
 
-		//todo：错误处理（重试）
-		err = service.network.NewSessionToPeer(relayId, neg.SessionId)
+		//new session to server
+		err = service.network.NewSessionToPeer(clientInfo.peerID, neg.SessionId)
 		if err != nil {
-			log.Errorf("New session to relay err %v", err)
+			log.Errorf("New session to destination err:%v", err)
 			continue
 		}
-
-		time.Sleep(time.Second)
-
-		err = service.network.ExpendSession(relayId, joinNode, neg.SessionId)
-		if err != nil {
-			log.Errorf("Expend session err %v", err)
-			continue
-		}
-
 	}
 }
